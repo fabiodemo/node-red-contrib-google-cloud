@@ -45,6 +45,7 @@ module.exports = function(RED) {
     function GoogleCloudPubSubInNode(config) {
         let pubsub       = null;
         let subscription = null;
+        const reconnectInterval = 300000;
 
         let credentials = null;
         if (config.account) {
@@ -116,8 +117,26 @@ module.exports = function(RED) {
                 subscription = null;
             }
             pubsub = null;
+            Reconnect();
         } // OnClose
-
+        
+        function Reconnect() {
+            clearTimeout(reconnectTimer); // Clear timer before each attempt
+            reconnectTimer = null;
+          
+            node.status(STATUS_CONNECTING);
+            pubsub.subscription(options.subscription).get().then((data) => {
+              subscription = data[0];
+              subscription.on('message', OnMessage);
+              subscription.on('error',   OnClose);
+              node.status(STATUS_CONNECTED);
+            }).catch((reason) => {
+              node.error(reason);
+              node.status(STATUS_DISCONNECTED);
+              reconnectInterval *= 2; // Double the interval each time
+              reconnectTimer = setTimeout(Reconnect, reconnectInterval);
+            });
+          } // Reconnect
 
         // We must have EITHER credentials or a keyFilename.  If neither are supplied, that
         // is an error.  If both are supplied, then credentials will be used.
