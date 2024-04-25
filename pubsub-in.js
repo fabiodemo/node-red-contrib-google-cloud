@@ -45,7 +45,9 @@ module.exports = function(RED) {
     function GoogleCloudPubSubInNode(config) {
         let pubsub       = null;
         let subscription = null;
-        const reconnectInterval = 300000;
+        const reconnectIntervalDefault = 300000;
+        let reconnectInterval = reconnectIntervalDefault;
+        let reconnectTimer = null; 
 
         let credentials = null;
         if (config.account) {
@@ -117,10 +119,10 @@ module.exports = function(RED) {
                 subscription = null;
             }
             pubsub = null;
-            Reconnect();
+            Connect();
         } // OnClose
         
-        function Reconnect() {
+        function Connect() {
             clearTimeout(reconnectTimer); // Clear timer before each attempt
             reconnectTimer = null;
           
@@ -134,9 +136,9 @@ module.exports = function(RED) {
               node.error(reason);
               node.status(STATUS_DISCONNECTED);
               reconnectInterval *= 2; // Double the interval each time
-              reconnectTimer = setTimeout(Reconnect, reconnectInterval);
+              reconnectTimer = setTimeout(Connect, reconnectInterval);
             });
-          } // Reconnect
+          } // Connect
 
         // We must have EITHER credentials or a keyFilename.  If neither are supplied, that
         // is an error.  If both are supplied, then credentials will be used.
@@ -156,16 +158,8 @@ module.exports = function(RED) {
             });
         }
 
-        node.status(STATUS_CONNECTING);                              // Flag the node as connecting.
-        pubsub.subscription(options.subscription).get().then((data) => {
-            subscription = data[0];
-            subscription.on('message', OnMessage);
-            subscription.on('error',   OnClose);
-            node.status(STATUS_CONNECTED);
-        }).catch((reason) => {
-            node.error(reason);
-            node.status(STATUS_DISCONNECTED);
-        });
+        
+        Connect();
 
 
         node.on("close", OnClose);
